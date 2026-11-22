@@ -73,7 +73,7 @@ def check_cover(name, cover):
 def check_forbidden(name, text, pattern, where):
     hit = pattern.findall(text or "")
     if hit:
-        add("E", "LEAK", f"{name} {where} 出现站外引流词：{'、'.join(sorted(set(hit))}")
+        add("E", "LEAK", f"{name} {where} 出现站外引流词：{'、'.join(sorted(set(hit)))")
 
 
 def main():
