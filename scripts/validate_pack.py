@@ -6,27 +6,12 @@
     python3 validate_pack.py manifest.json
     python3 validate_pack.py manifest.json --mode short
 
-manifest.json 结构：
-{
-  "topic": "选题名称",
-  "mode": "long",                       # long(默认,约3分钟) | short(60秒)
-  "sections": {
-    "oral":    {"title": "", "cover": "第一行／第二行", "script": "", "publish": ""},
-    "radio":   {"title": "", "cover": "", "script": "", "publish": ""},
-    "wechat":  {"title": "", "cover": "", "summary": "",
-                "sections": [{"heading": "", "text": ""}, ...],   # 必须6节
-                "images": [{"pos": "", "desc": ""}, ...],         # 最多5张
-                "publish": ""},
-    "graphic": {"titles": ["", "", ""], "cover": "", "publish": "",
-                "cards": [{"name": "", "text": ""}, ...]}         # 6–9张
-  }
-}
+manifest.json 结构见脚本内注释。
 """
 import argparse
 import json
 import re
 import sys
-import unicodedata
 
 FORBIDDEN_IN_VIDEO = re.compile(r"公众号|微信|加V|二维码|主页有|私信|回复.{0,3}关键词")
 FORBIDDEN_IN_XHS = re.compile(r"公众号|微信|加V|二维码|主页有|私信|回复.{0,3}关键词")
@@ -73,7 +58,8 @@ def check_cover(name, cover):
 def check_forbidden(name, text, pattern, where):
     hit = pattern.findall(text or "")
     if hit:
-        add("E", "LEAK", f"{name} {where} 出现站外引流词：{'、'.join(sorted(set(hit)))")
+        words = "、".join(sorted(set(hit)))
+        add("E", "LEAK", f"{name} {where} 出现站外引流词：{words}")
 
 
 def main():
@@ -92,19 +78,17 @@ def main():
         if key not in sec:
             add("E", "MISSING", f"缺少 {key} 板块")
 
-    # 口播视频
     oral = sec.get("oral", {})
     if oral:
         check_range("口播标题", oral.get("title", ""), 6, 20)
         check_cover("口播", oral.get("cover", ""))
         lo, hi = (900, 1150) if mode == "long" else (240, 300)
-        check_range(f"口播逐字稿({'3分钟' if mode == 'long' else '60秒'})",
-                    oral.get("script", ""), lo, hi)
+        tag = "3分钟" if mode == "long" else "60秒"
+        check_range(f"口播逐字稿({tag})", oral.get("script", ""), lo, hi)
         check_range("口播发布文案", oral.get("publish", ""), 140, 240)
         for f in ("title", "script", "publish"):
             check_forbidden("口播", oral.get(f, ""), FORBIDDEN_IN_VIDEO, f"的 {f}")
 
-    # 广播音频
     radio = sec.get("radio", {})
     if radio:
         check_range("广播标题", radio.get("title", ""), 6, 20)
@@ -114,7 +98,6 @@ def main():
         if "AI旅者广播站" not in (radio.get("script", "") or ""):
             add("W", "CTA", "广播稿未出现节目名《AI旅者广播站》")
 
-    # 公众号
     wx = sec.get("wechat", {})
     if wx:
         check_range("公众号标题", wx.get("title", ""), 6, 20)
@@ -136,7 +119,6 @@ def main():
             add("E", "IMG", f"公众号配图 {len(imgs)} 张，最多 5 张")
         check_range("公众号发布文案", wx.get("publish", ""), 140, 240)
 
-    # 种草图文
     gr = sec.get("graphic", {})
     if gr:
         titles = gr.get("titles", []) or []
