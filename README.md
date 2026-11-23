@@ -1,7 +1,7 @@
 # Topic Copy Pack · 选题全量文案包
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](VERSION)
+[![Version](https://img.shields.io/badge/version-1.1.1-blue.svg)](VERSION)
 
 > 一个选题进去，四平台成品、一篇结构化飞书文档、一份 HTML 引流资料一起出来。
 
