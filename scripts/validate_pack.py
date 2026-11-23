@@ -6,7 +6,17 @@
     python3 validate_pack.py manifest.json
     python3 validate_pack.py manifest.json --mode short
 
-manifest.json 结构见脚本内注释。
+manifest.json 结构：
+{
+  "topic": "选题名", "mode": "long|short",
+  "sections": {
+    "oral":    {"title","cover","script","publish"},
+    "radio":   {"title","cover","script","publish"},
+    "wechat":  {"title","cover","summary","sections":[{"heading","text"}],"images":[{"pos","desc"}],"publish"},
+    "graphic": {"titles":[...],"cover","publish","cards":[{"name","text"}]}
+  },
+  "lead": {"name":"《XX手册》","keyword":"手册","path":"05_引流资料/XTxxx_XX手册.html","sections":["..."]}
+}
 """
 import argparse
 import json
@@ -15,6 +25,8 @@ import sys
 
 FORBIDDEN_IN_VIDEO = re.compile(r"公众号|微信|加V|二维码|主页有|私信|回复.{0,3}关键词")
 FORBIDDEN_IN_XHS = re.compile(r"公众号|微信|加V|二维码|主页有|私信|回复.{0,3}关键词")
+FORBIDDEN_IN_LEAD = re.compile(r"扫码|扫一扫|加微信|私信我|进群|二维码")
+LEAD_EXTERNAL = re.compile(r'<link[^>]+href="http|<script[^>]+src="http|<img[^>]+src="http|@import\s+url\(http|url\(https?://')
 CJK_ASCII = re.compile(r"[\u4e00-\u9fffA-Za-z0-9]")
 
 errors, warnings = [], []
@@ -60,6 +72,71 @@ def check_forbidden(name, text, pattern, where):
     if hit:
         words = "、".join(sorted(set(hit)))
         add("E", "LEAK", f"{name} {where} 出现站外引流词：{words}")
+
+
+def check_lead(lead, oral, graphic, base_dir):
+    """引流资料：资料名、关键词、HTML 实体三者必须互相对得上。"""
+    if not lead:
+        add("E", "LEAD", "缺少 lead 板块：文案承诺的资料必须有对应的 HTML 实体")
+        return
+    name = (lead.get("name") or "").strip()
+    kw = (lead.get("keyword") or "").strip()
+    path = (lead.get("path") or "").strip()
+    sections = lead.get("sections") or []
+
+    if not name:
+        add("E", "LEAD", "lead.name 为空：资料名必须与文案 CTA 承诺一致")
+    else:
+        n = len(CJK_ASCII.findall(name))
+        if n < 4 or n > 20:
+            add("E", "LEAD", f"资料名「{name}」为 {n} 字，要求 4–20 字")
+        if not re.search("《.*》", name):
+            add("W", "LEAD", f"资料名「{name}」建议加书名号《》，便于文案里统一指代")
+
+    if not kw:
+        add("E", "LEAD", "lead.keyword 为空")
+    else:
+        n = len(CJK_ASCII.findall(kw))
+        if n < 2 or n > 6:
+            add("E", "LEAD", f"关键词「{kw}」为 {n} 字，要求 2–6 字")
+        for label, body in (("口播发布文案", oral.get("publish", "")), ("种草发布文案", graphic.get("publish", ""))):
+            if body and kw not in body:
+                add("E", "LEAD", f"{label} 未出现关键词「{kw}」，与资料对不上")
+
+    if not (6 <= len(sections) <= 9):
+        add("E", "LEAD", f"资料结构需 6–9 块，现有 {len(sections)} 块")
+
+    if not path:
+        add("E", "LEAD", "lead.path 为空：未指向 HTML 文件")
+        return
+    if not path.endswith(".html"):
+        add("E", "LEAD", f"lead.path 需为 .html，现有 {path}")
+        return
+
+    import os
+    fp = path if os.path.isabs(path) else os.path.join(base_dir, path)
+    if not os.path.exists(fp):
+        add("E", "LEAD", f"找不到 HTML 文件：{path}")
+        return
+
+    size = os.path.getsize(fp)
+    if size > 800 * 1024:
+        add("E", "LEAD", f"HTML 体积 {size / 1024:.0f}KB，超过 800KB 上限")
+
+    with open(fp, encoding="utf-8", errors="ignore") as f:
+        html_text = f.read()
+
+    if name:
+        bare = name.strip("《》")
+        if bare and bare not in html_text:
+            add("E", "LEAD", f"HTML 页面未出现资料名「{bare}」")
+    if kw and kw not in html_text:
+        add("E", "LEAD", f"HTML 页面未出现关键词「{kw}」")
+    if LEAD_EXTERNAL.search(html_text):
+        add("E", "LEAD", "HTML 引用了外链资源（CDN/字体/图片），断网会打不开")
+    hit = FORBIDDEN_IN_LEAD.findall(html_text)
+    if hit:
+        add("E", "LEAD", "HTML 出现违规引流词：" + "、".join(sorted(set(hit))))
 
 
 def main():
@@ -138,7 +215,11 @@ def main():
                 add("E", "CARD", f"卡{i:02d} 缺卡名")
             check_range(f"卡{i:02d} 内容", c.get("text", ""), 60, 160)
 
-    print(f"选题：{data.get('topic', '（未填）')}｜口播口径：{mode}")
+    import os
+    base_dir = os.path.dirname(os.path.abspath(args.manifest))
+    check_lead(data.get("lead"), oral, gr, base_dir)
+
+    print(f"选题：{data.get('topic', '（未填）')}｜口播口径：{mode}｜资料：《{ (data.get('lead') or {}).get('name','').strip('《》') or '未填'}》")
     print(f"错误 {len(errors)} 项，提醒 {len(warnings)} 项")
     for e in errors:
         print("  ✗", e)
