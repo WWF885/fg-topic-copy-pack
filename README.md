@@ -1,7 +1,7 @@
 # Topic Copy Pack · 选题全量文案包
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.2.0-blue.svg)](VERSION)
+[![Version](https://img.shields.io/badge/version-1.3.0-blue.svg)](VERSION)
 
 > 一个选题进去，四平台成品、一篇结构化飞书文档、一份 HTML 引流资料一起出来。
 
@@ -26,11 +26,13 @@
 | **知识卡片规范** | 6–9 张 3:4，筛选→拆解→模板→验收→总表→行动 |
 | **公众号一节一画板** | 6–8 节的长文，每节正文下方嵌一张真正可再编辑的飞书画板（SVG），不是配图 |
 | **引流资料同交付** | 文案承诺的《XX手册》落成单文件 HTML，断网可读、手机可看、可打印 |
+| **内嵌两个写法库** | 公众号接 `doubao-wechat-writing`（类型/排版/运营策略/内容验真），种草接 `doubao-note-creator`（笔记结构/配图/标签互动），不重写方法论 |
+| **公众号运营件齐全** | 备选标题 5 条、封面方案、内容验真 4 项、运营策略 6 条，一起进文档 |
 | **交付前自检** | 脚本校验字数、节数、画板数量与结论条、封面、卡片数、违规词、AI 味硬禁词、资料名与关键词一致性，不合格不交付 |
 
 ---
 
-## 各平台体量（v1.2.0）
+## 各平台体量（v1.3.0）
 
 | 平台 | 字数 | 说明 |
 |---|---|---|
@@ -68,6 +70,8 @@ references/
   ip-persona.md         人设、语气、金句、禁区
   card-specs.md         知识卡片规范
   lead-magnet-spec.md   HTML 引流资料规范（结构、视觉、技术红线）
+  wechat-playbook.md    公众号写法（内嵌 doubao-wechat-writing）
+  note-playbook.md      种草笔记写法（内嵌 doubao-note-creator）
 scripts/
   validate_pack.py      交付前硬校验
 ```
