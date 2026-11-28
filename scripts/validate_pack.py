@@ -5,6 +5,7 @@
 用法：
     python3 validate_pack.py manifest.json
     python3 validate_pack.py manifest.json --mode short
+    python3 validate_pack.py manifest.json --platforms wechat
 
 manifest.json 结构：
 {
@@ -86,7 +87,7 @@ def check_forbidden(name, text, pattern, where):
         add("E", "LEAK", f"{name} {where} 出现站外引流词：{words}")
 
 
-def check_lead(lead, oral, graphic, base_dir):
+def check_lead(lead, oral, graphic, base_dir, allowed=None):
     """引流资料：资料名、关键词、HTML 实体三者必须互相对得上。"""
     if not lead:
         add("E", "LEAD", "缺少 lead 板块：文案承诺的资料必须有对应的 HTML 实体")
@@ -111,7 +112,10 @@ def check_lead(lead, oral, graphic, base_dir):
         n = len(CJK_ASCII.findall(kw))
         if n < 2 or n > 6:
             add("E", "LEAD", f"关键词「{kw}」为 {n} 字，要求 2–6 字")
-        for label, body in (("口播发布文案", oral.get("publish", "")), ("种草发布文案", graphic.get("publish", ""))):
+        pairs = [("口播发布文案", oral.get("publish", ""), "oral"), ("种草发布文案", graphic.get("publish", ""), "graphic")]
+        for label, body, key in pairs:
+            if allowed and key not in allowed:
+                continue
             if body and kw not in body:
                 add("E", "LEAD", f"{label} 未出现关键词「{kw}」，与资料对不上")
 
@@ -154,20 +158,26 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("manifest")
     ap.add_argument("--mode", choices=["long", "short"], default=None)
+    ap.add_argument("--platforms", default="oral,radio,wechat,graphic",
+                    help="逗号分隔，只校验指定平台，如 --platforms wechat（用户只要单平台时用）")
     args = ap.parse_args()
 
     with open(args.manifest, encoding="utf-8") as f:
         data = json.load(f)
 
     mode = args.mode or data.get("mode", "long")
+    allowed = {p.strip() for p in args.platforms.split(",") if p.strip()}
+    unknown = allowed - {"oral", "radio", "wechat", "graphic"}
+    if unknown:
+        add("E", "PLATFORM", "未知平台：" + "、".join(sorted(unknown)))
     base_dir = os.path.dirname(os.path.abspath(args.manifest))
     sec = data.get("sections", {})
 
     for key in ("oral", "radio", "wechat", "graphic"):
-        if key not in sec:
+        if key in allowed and key not in sec:
             add("E", "MISSING", f"缺少 {key} 板块")
 
-    oral = sec.get("oral", {})
+    oral = sec.get("oral", {}) if "oral" in allowed else {}
     if oral:
         check_range("口播标题", oral.get("title", ""), 6, 20)
         check_cover("口播", oral.get("cover", ""))
@@ -178,7 +188,7 @@ def main():
         for f in ("title", "script", "publish"):
             check_forbidden("口播", oral.get(f, ""), FORBIDDEN_IN_VIDEO, f"的 {f}")
 
-    radio = sec.get("radio", {})
+    radio = sec.get("radio", {}) if "radio" in allowed else {}
     if radio:
         check_range("广播标题", radio.get("title", ""), 6, 20)
         check_cover("广播", radio.get("cover", ""))
@@ -187,7 +197,7 @@ def main():
         if "AI旅者广播站" not in (radio.get("script", "") or ""):
             add("W", "CTA", "广播稿未出现节目名《AI旅者广播站》")
 
-    wx = sec.get("wechat", {})
+    wx = sec.get("wechat", {}) if "wechat" in allowed else {}
     if wx:
         check_range("公众号标题", wx.get("title", ""), 6, 20)
         check_cover("公众号", wx.get("cover", ""))
@@ -229,7 +239,7 @@ def main():
                     add("E", "BOARD", f"找不到画板文件：{f_}")
         check_range("公众号发布文案", wx.get("publish", ""), 140, 240)
 
-    gr = sec.get("graphic", {})
+    gr = sec.get("graphic", {}) if "graphic" in allowed else {}
     if gr:
         titles = gr.get("titles", []) or []
         if len(titles) != 3:
@@ -248,7 +258,10 @@ def main():
                 add("E", "CARD", f"卡{i:02d} 缺卡名")
             check_range(f"卡{i:02d} 内容", c.get("text", ""), 60, 160)
 
-    check_lead(data.get("lead"), oral, gr, base_dir)
+    if data.get("lead") or allowed == {"oral", "radio", "wechat", "graphic"}:
+        check_lead(data.get("lead"), oral, gr, base_dir, allowed)
+    else:
+        add("W", "LEAD", "本次只校验部分平台且未填 lead，已跳过资料一致性检查")
 
     check_ai_flavor("口播逐字稿", oral.get("script", ""))
     check_ai_flavor("广播稿", radio.get("script", ""))
