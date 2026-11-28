@@ -13,8 +13,8 @@ manifest.json 结构：
   "sections": {
     "oral":    {"title","cover","script","publish"},
     "radio":   {"title","cover","script","publish"},
-    "wechat":  {"title","cover","summary","sections":[{"heading","text"}],"boards":[{"sec","caption","file"}],"publish"},
-    "graphic": {"titles":[...],"cover","publish","cards":[{"name","text"}]}
+    "wechat":  {"title","cover","summary","sections":[{"heading","text"}],"boards":[{"sec","caption","file"}],"alt_titles":[...5],"cover_plan":"...","verify":[...4],"ops":[...6],"style":"知识卡片","publish"},
+    "graphic": {"titles":[...],"cover","publish","cards":[{"name","text"}],"tags":[...5-8],"comment":"...","visual":"..."}
   },
   "lead": {"name":"《XX手册》","keyword":"手册","path":"XTxxx_XX手册.html","sections":["..."]}
 }
@@ -239,6 +239,25 @@ def main():
                     add("E", "BOARD", f"找不到画板文件：{f_}")
         check_range("公众号发布文案", wx.get("publish", ""), 140, 240)
 
+        alts = wx.get("alt_titles", []) or []
+        if not (3 <= len(alts) <= 5):
+            add("E", "ALT", f"公众号备选标题需 3–5 条，现有 {len(alts)} 条")
+        for i, t in enumerate(alts, 1):
+            check_range(f"公众号备选标题{i}", t, 6, 20)
+        style = (wx.get("style") or "").strip()
+        if not style:
+            add("E", "STYLE", "公众号未标排版风格（知识卡片/极简留白/现代杂志/高端商务/文艺清新）")
+        elif style not in ("知识卡片", "极简留白", "现代杂志", "高端商务", "文艺清新", "知识卡片风", "极简留白风", "现代杂志风", "高端商务风", "文艺清新风"):
+            add("W", "STYLE", f"公众号排版风格「{style}」不在五种默认风格内")
+        if not (wx.get("cover_plan") or "").strip():
+            add("E", "COVERPLAN", "公众号缺封面图方案（主标/副标/尺寸/视觉方向）")
+        verify = wx.get("verify", []) or []
+        if len(verify) < 3:
+            add("E", "VERIFY", f"公众号内容验真需至少 3 项（事实/数字/案例/图片），现有 {len(verify)} 项")
+        ops = wx.get("ops", []) or []
+        if not (5 <= len(ops) <= 8):
+            add("E", "OPS", f"公众号运营建议需 5–8 条，现有 {len(ops)} 条")
+
     gr = sec.get("graphic", {}) if "graphic" in allowed else {}
     if gr:
         titles = gr.get("titles", []) or []
@@ -257,6 +276,21 @@ def main():
             if not (c.get("name") or "").strip():
                 add("E", "CARD", f"卡{i:02d} 缺卡名")
             check_range(f"卡{i:02d} 内容", c.get("text", ""), 60, 160)
+
+        tags = gr.get("tags", []) or []
+        if not (5 <= len(tags) <= 8):
+            add("E", "TAG", f"种草话题标签需 5–8 个，现有 {len(tags)} 个")
+        for t in tags:
+            t_ = str(t).strip().lstrip("#")
+            if not (2 <= len(CJK_ASCII.findall(t_)) <= 10):
+                add("W", "TAG", f"标签「{t}」长度异常（建议 2–10 字）")
+        comment = (gr.get("comment") or "").strip()
+        if len(CJK_ASCII.findall(comment)) < 8:
+            add("E", "COMMENT", "种草缺评论区引导（一句关键词＋轻动作）")
+        else:
+            check_forbidden("种草", comment, FORBIDDEN_IN_XHS, "评论区引导")
+        if not (gr.get("visual") or "").strip():
+            add("E", "VISUAL", "种草缺封面与配图方案（封面卡＋内页卡版式）")
 
     if data.get("lead") or allowed == {"oral", "radio", "wechat", "graphic"}:
         check_lead(data.get("lead"), oral, gr, base_dir, allowed)
