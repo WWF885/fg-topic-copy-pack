@@ -12,14 +12,15 @@ manifest.json 结构：
   "sections": {
     "oral":    {"title","cover","script","publish"},
     "radio":   {"title","cover","script","publish"},
-    "wechat":  {"title","cover","summary","sections":[{"heading","text"}],"images":[{"pos","desc"}],"publish"},
+    "wechat":  {"title","cover","summary","sections":[{"heading","text"}],"boards":[{"sec","caption","file"}],"publish"},
     "graphic": {"titles":[...],"cover","publish","cards":[{"name","text"}]}
   },
-  "lead": {"name":"《XX手册》","keyword":"手册","path":"05_引流资料/XTxxx_XX手册.html","sections":["..."]}
+  "lead": {"name":"《XX手册》","keyword":"手册","path":"XTxxx_XX手册.html","sections":["..."]}
 }
 """
 import argparse
 import json
+import os
 import re
 import sys
 
@@ -28,6 +29,8 @@ FORBIDDEN_IN_XHS = re.compile(r"公众号|微信|加V|二维码|主页有|私信
 FORBIDDEN_IN_LEAD = re.compile(r"扫码|扫一扫|加微信|私信我|进群|二维码")
 LEAD_EXTERNAL = re.compile(r'<link[^>]+href="http|<script[^>]+src="http|<img[^>]+src="http|@import\s+url\(http|url\(https?://')
 CJK_ASCII = re.compile(r"[\u4e00-\u9fffA-Za-z0-9]")
+AI_FLAVOR_HARD = re.compile(r"赋能|闭环|底层逻辑|值得注意的是|综上所述|生态位|组合拳|抓手|颗粒度")
+AI_FLAVOR_SOFT = re.compile(r"首先|其次|此外|第一，|第二，|总而言之|不难发现")
 
 errors, warnings = [], []
 
@@ -65,6 +68,15 @@ def check_cover(name, cover):
         n = len(CJK_ASCII.findall(p))
         if n < 2 or n > 4:
             add("E", "COVER", f"{name} 封面「{p}」为 {n} 字，每行需 2–4 字")
+
+
+def check_ai_flavor(name, text):
+    hard = AI_FLAVOR_HARD.findall(text or "")
+    if hard:
+        add("E", "AI", f"{name} 出现 AI 味硬禁词：" + "、".join(sorted(set(hard))))
+    soft = AI_FLAVOR_SOFT.findall(text or "")
+    if len(soft) > 2:
+        add("W", "AI", f"{name} 模板化连接词 {len(soft)} 处（{'、'.join(sorted(set(soft)))}），建议删到 2 处以内")
 
 
 def check_forbidden(name, text, pattern, where):
@@ -113,7 +125,6 @@ def check_lead(lead, oral, graphic, base_dir):
         add("E", "LEAD", f"lead.path 需为 .html，现有 {path}")
         return
 
-    import os
     fp = path if os.path.isabs(path) else os.path.join(base_dir, path)
     if not os.path.exists(fp):
         add("E", "LEAD", f"找不到 HTML 文件：{path}")
@@ -149,6 +160,7 @@ def main():
         data = json.load(f)
 
     mode = args.mode or data.get("mode", "long")
+    base_dir = os.path.dirname(os.path.abspath(args.manifest))
     sec = data.get("sections", {})
 
     for key in ("oral", "radio", "wechat", "graphic"):
@@ -159,7 +171,7 @@ def main():
     if oral:
         check_range("口播标题", oral.get("title", ""), 6, 20)
         check_cover("口播", oral.get("cover", ""))
-        lo, hi = (900, 1150) if mode == "long" else (240, 300)
+        lo, hi = (800, 1000) if mode == "long" else (240, 300)
         tag = "3分钟" if mode == "long" else "60秒"
         check_range(f"口播逐字稿({tag})", oral.get("script", ""), lo, hi)
         check_range("口播发布文案", oral.get("publish", ""), 140, 240)
@@ -170,7 +182,7 @@ def main():
     if radio:
         check_range("广播标题", radio.get("title", ""), 6, 20)
         check_cover("广播", radio.get("cover", ""))
-        check_range("广播稿", radio.get("script", ""), 1000, 1250)
+        check_range("广播稿", radio.get("script", ""), 1900, 2100)
         check_range("广播发布文案", radio.get("publish", ""), 140, 240)
         if "AI旅者广播站" not in (radio.get("script", "") or ""):
             add("W", "CTA", "广播稿未出现节目名《AI旅者广播站》")
@@ -181,19 +193,40 @@ def main():
         check_cover("公众号", wx.get("cover", ""))
         check_range("公众号摘要", wx.get("summary", ""), 50, 120)
         body = wx.get("sections", []) or []
-        if len(body) != 6:
-            add("E", "SECTION", f"公众号正文需 6 节，现有 {len(body)} 节")
+        if not (6 <= len(body) <= 8):
+            add("E", "SECTION", f"公众号正文需 6–8 节，现有 {len(body)} 节")
         total = 0
-        for i, s in enumerate(body, 1):
-            total += char_count(s.get("text", ""))
-            check_range(f"公众号正文第{i}节", s.get("text", ""), 130, 280)
-            if not (s.get("heading") or "").strip():
+        for i, s_ in enumerate(body, 1):
+            total += char_count(s_.get("text", ""))
+            check_range(f"公众号正文第{i}节", s_.get("text", ""), 150, 300)
+            if not (s_.get("heading") or "").strip():
                 add("E", "HEADING", f"公众号正文第{i}节缺小标题")
-        if total < 1000 or total > 1600:
-            add("E", "LEN", f"公众号正文合计 {total} 字，要求 1000–1600 字")
-        imgs = wx.get("images", []) or []
-        if len(imgs) > 5:
-            add("E", "IMG", f"公众号配图 {len(imgs)} 张，最多 5 张")
+        if total < 1350 or total > 1650:
+            add("E", "LEN", f"公众号正文合计 {total} 字，要求 1350–1650 字（目标1500）")
+
+        boards = wx.get("boards", []) or []
+        if not (6 <= len(boards) <= 8):
+            add("E", "BOARD", f"公众号画板需 6–8 张（一节一张），现有 {len(boards)} 张")
+        if body and len(boards) and len(boards) < len(body) - 1:
+            add("E", "BOARD", f"画板 {len(boards)} 张少于节数 {len(body)}，除引流收束节外每节都要有")
+        for i, b in enumerate(boards, 1):
+            cap = (b.get("caption") or "").strip()
+            if not cap:
+                add("E", "BOARD", f"画板{i:02d} 缺 caption（要让人看懂的结论）")
+            elif len(CJK_ASCII.findall(cap)) > 12:
+                add("E", "BOARD", f"画板{i:02d} 结论条「{cap}」超过 12 字")
+            sec_id = str(b.get("sec") or "").strip()
+            if not sec_id:
+                add("E", "BOARD", f"画板{i:02d} 未标注对应节 sec")
+            f_ = (b.get("file") or "").strip().lstrip("@./")
+            if not f_:
+                add("E", "BOARD", f"画板{i:02d} 缺 file")
+            else:
+                if not f_.endswith(".svg"):
+                    add("W", "BOARD", f"画板{i:02d} 文件 {f_} 不是 .svg，飞书画板建议用 SVG")
+                fp = f_ if os.path.isabs(f_) else os.path.join(base_dir, f_)
+                if not os.path.exists(fp):
+                    add("E", "BOARD", f"找不到画板文件：{f_}")
         check_range("公众号发布文案", wx.get("publish", ""), 140, 240)
 
     gr = sec.get("graphic", {})
@@ -215,9 +248,12 @@ def main():
                 add("E", "CARD", f"卡{i:02d} 缺卡名")
             check_range(f"卡{i:02d} 内容", c.get("text", ""), 60, 160)
 
-    import os
-    base_dir = os.path.dirname(os.path.abspath(args.manifest))
     check_lead(data.get("lead"), oral, gr, base_dir)
+
+    check_ai_flavor("口播逐字稿", oral.get("script", ""))
+    check_ai_flavor("广播稿", radio.get("script", ""))
+    check_ai_flavor("公众号正文", "".join(s_.get("text", "") for s_ in (wx.get("sections") or [])))
+    check_ai_flavor("种草发布文案", gr.get("publish", ""))
 
     print(f"选题：{data.get('topic', '（未填）')}｜口播口径：{mode}｜资料：《{ (data.get('lead') or {}).get('name','').strip('《》') or '未填'}》")
     print(f"错误 {len(errors)} 项，提醒 {len(warnings)} 项")
